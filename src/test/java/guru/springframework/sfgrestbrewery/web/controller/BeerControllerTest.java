@@ -17,7 +17,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -88,8 +87,8 @@ class BeerControllerTest {
 
     @Test
     void updateBeerById() {
-        UUID beerId = UUID.randomUUID();
-        given(beerService.updateBeer(beerId, validBeer)).willReturn(validBeer);
+        Integer beerId = 1;
+        given(beerService.updateBeer(beerId, validBeer)).willReturn(Mono.just(validBeer));
 
         webTestClient.put()
                 .uri("/api/v1/beer/" + beerId)

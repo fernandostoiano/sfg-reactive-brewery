@@ -12,7 +12,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 
-import java.util.UUID;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by jt on 2019-04-20.
@@ -49,6 +51,12 @@ public class BeerController {
         return ResponseEntity.ok(beerService.listBeers(beerName, beerStyle, PageRequest.of(pageNumber, pageSize), showInventoryOnHand));
     }
 
+    @ExceptionHandler
+    ResponseEntity<Void> handleNotFound(NotFoundException ex) {
+        return ResponseEntity.notFound().build();
+    }
+
+
     @GetMapping("beer/{beerId}")
     public ResponseEntity<Mono<BeerDto>> getBeerById(@PathVariable("beerId") Integer beerId,
                                                     @RequestParam(value = "showInventoryOnHand", required = false) Boolean showInventoryOnHand){
@@ -56,7 +64,13 @@ public class BeerController {
             showInventoryOnHand = false;
         }
 
-        return ResponseEntity.ok(beerService.getById(beerId, showInventoryOnHand));
+        return ResponseEntity.ok(beerService.getById(beerId, showInventoryOnHand)
+                .defaultIfEmpty(BeerDto.builder().build())
+                .doOnNext(beerDto -> {
+                    if(Objects.isNull(beerDto.getId())) {
+                        throw new NotFoundException();
+                    }
+                }));
     }
 
     @GetMapping("beerUpc/{upc}")
@@ -67,18 +81,36 @@ public class BeerController {
     @PostMapping(path = "beer")
     public ResponseEntity<Void> saveNewBeer(@RequestBody @Validated BeerDto beerDto){
 
-        BeerDto savedBeer = beerService.saveNewBeer(beerDto);
+        AtomicInteger atomicInteger = new AtomicInteger();
+
+        beerService.saveNewBeer(beerDto).subscribe(savedBeerDto -> {
+            atomicInteger.set(savedBeerDto.getId());
+        });
 
         return ResponseEntity
                 .created(UriComponentsBuilder
-                        .fromHttpUrl("http://api.springframework.guru/api/v1/beer/" + savedBeer.getId().toString())
+                        .fromHttpUrl("http://api.springframework.guru/api/v1/beer/" + atomicInteger.get())
                         .build().toUri())
                 .build();
     }
 
     @PutMapping("beer/{beerId}")
-    public ResponseEntity<Void> updateBeerById(@PathVariable("beerId") UUID beerId, @RequestBody @Validated BeerDto beerDto){
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> updateBeerById(@PathVariable("beerId") Integer beerId, @RequestBody @Validated BeerDto beerDto){
+
+        AtomicBoolean atomicBoolean = new AtomicBoolean(false);
+
+        beerService.updateBeer(beerId, beerDto).subscribe(savedDto -> {
+            if(Objects.nonNull(savedDto.getId())) {
+                atomicBoolean.set(true);
+            }
+        });
+
+        if(atomicBoolean.get()) {
+            return ResponseEntity.noContent().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+
     }
 
     @DeleteMapping("beer/{beerId}")

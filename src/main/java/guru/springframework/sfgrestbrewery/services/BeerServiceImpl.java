@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
-import java.util.UUID;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static org.springframework.data.relational.core.query.Criteria.where;
@@ -72,22 +72,28 @@ public class BeerServiceImpl implements BeerService {
     }
 
     @Override
-    public BeerDto saveNewBeer(BeerDto beerDto) {
-//        return beerMapper.beerToBeerDto(beerRepository.save(beerMapper.beerDtoToBeer(beerDto)));
-        return null;
+    public Mono<BeerDto> saveNewBeer(BeerDto beerDto) {
+        return beerRepository.save(beerMapper.beerDtoToBeer(beerDto)).map(beerMapper::beerToBeerDto);
     }
 
     @Override
-    public BeerDto updateBeer(UUID beerId, BeerDto beerDto) {
-//        Beer beer = beerRepository.findById(beerId).orElseThrow(NotFoundException::new);
-//
-//        beer.setBeerName(beerDto.getBeerName());
-//        beer.setBeerStyle(BeerStyleEnum.PILSNER.valueOf(beerDto.getBeerStyle()));
-//        beer.setPrice(beerDto.getPrice());
-//        beer.setUpc(beerDto.getUpc());
-//
-//        return beerMapper.beerToBeerDto(beerRepository.save(beer));
-        return null;
+    public Mono<BeerDto> updateBeer(Integer beerId, BeerDto beerDto) {
+        return beerRepository.findById(beerId)
+                .defaultIfEmpty(Beer.builder().build())
+                .map(beer -> {
+                    beer.setBeerName(beerDto.getBeerName());
+                    beer.setBeerStyle(BeerStyleEnum.valueOf(beerDto.getBeerStyle()));
+                    beer.setPrice(beerDto.getPrice());
+                    beer.setUpc(beerDto.getUpc());
+                    return beer;
+                }).flatMap(updateBeer -> {
+                    if(Objects.nonNull(updateBeer.getId())) {
+                        return beerRepository.save(updateBeer);
+                    }
+
+                    return Mono.just(updateBeer);
+                })
+                .map(beerMapper::beerToBeerDto);
     }
 
     @Cacheable(cacheNames = "beerUpcCache")
@@ -98,7 +104,7 @@ public class BeerServiceImpl implements BeerService {
 
     @Override
     public void deleteBeerById(Integer beerId) {
-        beerRepository.deleteById(beerId);
+        beerRepository.deleteById(beerId).subscribe();
     }
 
 }
